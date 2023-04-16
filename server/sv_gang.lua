@@ -5,21 +5,17 @@ function GetGangAccount(account)
 	return GangAccounts[account] or 0
 end
 
-function AddGangMoney(account, amount)
+function AddGangMoney(account, amount, citid)
 	if not GangAccounts[account] then
 		GangAccounts[account] = 0
 	end
 
 	GangAccounts[account] = GangAccounts[account] + amount
-	MySQL.insert('INSERT INTO management_funds (job_name, amount, type) VALUES (:job_name, :amount, :type) ON DUPLICATE KEY UPDATE amount = :amount',
-		{
-			['job_name'] = account,
-			['amount'] = GangAccounts[account],
-			['type'] = 'gang'
-		})
+	exports['Renewed-Banking']:handleTransaction(account, "Management Deposit", amount, "Management Deposit", citid, "Management Deposit", "deposit")
+	exports['Renewed-Banking']:addAccountMoney(account, amount)
 end
 
-function RemoveGangMoney(account, amount)
+function RemoveGangMoney(account, amount, citid)
 	local isRemoved = false
 	if amount > 0 then
 		if not GangAccounts[account] then
@@ -30,18 +26,19 @@ function RemoveGangMoney(account, amount)
 			GangAccounts[account] = GangAccounts[account] - amount
 			isRemoved = true
 		end
+		exports['Renewed-Banking']:handleTransaction(account, "Management Withdraw", amount, "Management Withdraw", citid, "Management Withdraw", "withdraw")
+		exports['Renewed-Banking']:removeAccountMoney(account, amount)
 
-		MySQL.update('UPDATE management_funds SET amount = ? WHERE job_name = ? and type = "gang"', { GangAccounts[account], account })
-	end
+		end
 	return isRemoved
 end
 
 MySQL.ready(function ()
-	local gangmenu = MySQL.query.await('SELECT job_name,amount FROM management_funds WHERE type = "gang"', {})
+	local gangmenu = MySQL.query.await('SELECT id,amount FROM bank_accounts_new WHERE 1', {})
 	if not gangmenu then return end
 
 	for _,v in ipairs(gangmenu) do
-		GangAccounts[v.job_name] = v.amount
+		GangAccounts[v.id] = v.amount
 	end
 end)
 
@@ -52,7 +49,8 @@ RegisterNetEvent("qb-gangmenu:server:withdrawMoney", function(amount)
 	if not Player.PlayerData.gang.isboss then ExploitBan(src, 'withdrawMoney Exploiting') return end
 
 	local gang = Player.PlayerData.gang.name
-	if RemoveGangMoney(gang, amount) then
+	local citid = Player.PlayerData.citizenid
+	if RemoveGangMoney(gang, amount, citid) then
 		Player.Functions.AddMoney("cash", amount, 'Gang menu withdraw')
 		TriggerEvent('qb-log:server:CreateLog', 'gangmenu', 'Withdraw Money', 'yellow', Player.PlayerData.charinfo.firstname .. ' ' .. Player.PlayerData.charinfo.lastname .. ' successfully withdrew $' .. amount .. ' (' .. gang .. ')', false)
 		TriggerClientEvent('QBCore:Notify', src, "You have withdrawn: $" ..amount, "success")
@@ -71,7 +69,8 @@ RegisterNetEvent("qb-gangmenu:server:depositMoney", function(amount)
 
 	if Player.Functions.RemoveMoney("cash", amount) then
 		local gang = Player.PlayerData.gang.name
-		AddGangMoney(gang, amount)
+		local citid = Player.PlayerData.citizenid
+		AddGangMoney(gang, amount, citid)
 		TriggerEvent('qb-log:server:CreateLog', 'gangmenu', 'Deposit Money', 'yellow', Player.PlayerData.charinfo.firstname .. ' ' .. Player.PlayerData.charinfo.lastname .. ' successfully deposited $' .. amount .. ' (' .. gang .. ')', false)
 		TriggerClientEvent('QBCore:Notify', src, "You have deposited: $" ..amount, "success")
 	else
