@@ -1,6 +1,7 @@
 # qb-management
 
 New qb-bossmenu / qb-gangmenu converted into one resource using qb-menu and qb-input, with SQL support for society funds!
+This now functions with Renewed-Banking for Adding Money and Withdrawing from a company bank account
 
 ## Dependencies
 - [qb-core](https://github.com/qbcore-framework/qb-core)
