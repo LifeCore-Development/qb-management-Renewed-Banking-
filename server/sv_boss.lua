@@ -19,21 +19,17 @@ function GetAccount(account)
 	return Accounts[account] or 0
 end
 
-function AddMoney(account, amount)
+function AddMoney(account, amount, citid)
 	if not Accounts[account] then
 		Accounts[account] = 0
 	end
 
 	Accounts[account] = Accounts[account] + amount
-	MySQL.insert('INSERT INTO management_funds (job_name, amount, type) VALUES (:job_name, :amount, :type) ON DUPLICATE KEY UPDATE amount = :amount',
-		{
-			['job_name'] = account,
-			['amount'] = Accounts[account],
-			['type'] = 'boss'
-		})
+	exports['Renewed-Banking']:handleTransaction(account, "Management Deposit", amount, "Management Deposit", citid, "Management Deposit", "deposit")
+	exports['Renewed-Banking']:addAccountMoney(account, amount)
 end
 
-function RemoveMoney(account, amount)
+function RemoveMoney(account, amount, citid)
 	local isRemoved = false
 	if amount > 0 then
 		if not Accounts[account] then
@@ -44,18 +40,22 @@ function RemoveMoney(account, amount)
 			Accounts[account] = Accounts[account] - amount
 			isRemoved = true
 		end
+		exports['Renewed-Banking']:handleTransaction(account, "Management Withdraw", amount, "Management Withdraw", citid, "Management Withdraw", "withdraw")
+		exports['Renewed-Banking']:removeAccountMoney(account, amount)
 
-		MySQL.update('UPDATE management_funds SET amount = ? WHERE job_name = ? and type = "boss"', { Accounts[account], account })
+
+		--MySQL.update('UPDATE management_funds SET amount = ? WHERE job_name = ? and type = "boss"', { Accounts[account], account })
 	end
 	return isRemoved
 end
 
 MySQL.ready(function ()
-	local bossmenu = MySQL.query.await('SELECT job_name,amount FROM management_funds WHERE type = "boss"', {})
+	--local bossmenu = MySQL.query.await('SELECT job_name,amount FROM management_funds WHERE type = "boss"', {})
+	local bossmenu = MySQL.query.await('SELECT id,amount FROM bank_accounts_new WHERE 1', {})
 	if not bossmenu then return end
 
 	for _,v in ipairs(bossmenu) do
-		Accounts[v.job_name] = v.amount
+		Accounts[v.id] = v.amount
 	end
 end)
 
@@ -66,7 +66,8 @@ RegisterNetEvent("qb-bossmenu:server:withdrawMoney", function(amount)
 	if not Player.PlayerData.job.isboss then ExploitBan(src, 'withdrawMoney Exploiting') return end
 
 	local job = Player.PlayerData.job.name
-	if RemoveMoney(job, amount) then
+	local citid = Player.PlayerData.citizenid
+	if RemoveMoney(job, amount, citid) then
 		Player.Functions.AddMoney("cash", amount, 'Boss menu withdraw')
 		TriggerEvent('qb-log:server:CreateLog', 'bossmenu', 'Withdraw Money', "blue", Player.PlayerData.name.. "Withdrawal $" .. amount .. ' (' .. job .. ')', false)
 		TriggerClientEvent('QBCore:Notify', src, "You have withdrawn: $" ..amount, "success")
@@ -85,7 +86,8 @@ RegisterNetEvent("qb-bossmenu:server:depositMoney", function(amount)
 
 	if Player.Functions.RemoveMoney("cash", amount) then
 		local job = Player.PlayerData.job.name
-		AddMoney(job, amount)
+		local citid = Player.PlayerData.citizenid
+		AddMoney(job, amount, citid)
 		TriggerEvent('qb-log:server:CreateLog', 'bossmenu', 'Deposit Money', "blue", Player.PlayerData.name.. "Deposit $" .. amount .. ' (' .. job .. ')', false)
 		TriggerClientEvent('QBCore:Notify', src, "You have deposited: $" ..amount, "success")
 	else
